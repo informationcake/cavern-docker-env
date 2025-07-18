@@ -1,41 +1,50 @@
 #!/bin/bash
+set -e # Exit immediately if a command exits with a non-zero status.
 
-SELF=$(basename $(pwd))
-IMG=cavern:latest
+SELF=$(basename "$(pwd)")
 IMG="images.opencadc.org/platform/cavern:0.8.2"
 
-. $HOME/bin/docker-static-ip $SELF
+# Source the static IP script to set DOCKER_STATIC_IP and DOCKER_NET
+. "$HOME/bin/docker-static-ip" "$SELF"
+
 echo "DOCKER_STATIC_IP: $DOCKER_STATIC_IP"
 echo "      DOCKER_NET: $DOCKER_NET"
 
+# Remove old log file and create a new one
 \rm -f tomcat.log && touch tomcat.log
 
-DATADIR=/data/local/src-cavern
-if [ ! -d $DATADIR ]; then
-    echo "not found: DATADIR=$DATADIR"
-    exit 1
+# Define local data directory relative to this script and create it
+DATADIR="$(pwd)/../local_data/src-cavern"
+mkdir -p "$DATADIR" # Ensure directory exists
+
+# Get HAProxy's IP for --add-host
+HAP_HOST="haproxy.cadc.dao.nrc.ca"
+HAP_IP=$(docker inspect haproxy | jq -r '.[0].NetworkSettings.Networks."docker26".IPAddress')
+
+if [ -z "$HAP_IP" ]; then
+  echo "Error: Could not get IP address for haproxy container." >&2
+  exit 1
 fi
 
-HAP=haproxy.cadc.dao.nrc.ca
-HAPIP=$(grep $HAP /etc/hosts | awk '{print $1}')
+# We will now wrap the container's command to first import the PUBLIC certificate
+# into the JVM's trust store, and then start the server.
+START_COMMAND="bash -c \"keytool -importcert -keystore /usr/lib/jvm/java-11-openjdk-11.0.25.0.9-3.fc40.x86_64/lib/security/cacerts -storepass changeit -noprompt -alias haproxy-local -file /config/haproxy-pub.pem && cadc-tomcat-start\""
 
-PG=srcnodedb
-PGIP=$(lxc list | grep $PG | awk '{print $6}')
-
-## YES: runs as root internally
+# Construct the full docker run command
 CMD="docker run --rm --user root:root \
     --network=$DOCKER_NET --ip=$DOCKER_STATIC_IP \
-    --add-host $HAP:$HAPIP \
-    --add-host $PG:$PGIP \
+    --add-host $HAP_HOST:$HAP_IP \
     --volume=$(pwd)/config:/config:ro \
     --volume=${DATADIR}:/data:rw \
-    --name $SELF $IMG"
+    --name $SELF $IMG \
+    $START_COMMAND"
 
-echo $CMD
+echo "Executing Docker command..."
 
-exec $CMD >& tomcat.log &
+# Execute the command in the background and redirect output to log
+eval exec $CMD >& tomcat.log &
 
+# If -f argument is provided, tail the log file
 if [ "$1" = "-f" ]; then
     tail -100f tomcat.log
 fi
-

@@ -1,0 +1,2 @@
+CREATE SCHEMA uws;
+GRANT ALL ON SCHEMA uws TO tapadm;

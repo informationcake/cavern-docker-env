@@ -1,21 +1,35 @@
 #!/bin/bash
+set -e # Exit immediately if a command exits with a non-zero status.
 
-SELF=$(basename $(pwd))
-IMG="cadc-haproxy-dev:latest"
-IMG="images.opencadc.org/dev-only/cadc-haproxy-dev:1"
+SELF=$(basename "$(pwd)")
+IMG="haproxytech/haproxy-debian:latest" # Recommended: Switching to standard HAProxy image
 
-. $HOME/bin/docker-static-ip $SELF
+# Source the static IP script to set DOCKER_STATIC_IP and DOCKER_NET
+. "$HOME/bin/docker-static-ip" "$SELF"
+
 echo "DOCKER_STATIC_IP: $DOCKER_STATIC_IP"
 echo "      DOCKER_NET: $DOCKER_NET"
 
+# Expose port 443 on the host
 EXPOSE="-p 443:443"
 
-CMD="docker run --rm --user root:root $EXPOSE --network=$DOCKER_NET --ip=$DOCKER_STATIC_IP \
-	--volume=$(pwd)/config:/config:ro \
-	--name $SELF $IMG"
-        
-echo $CMD
+# Remove old log file and create a new one
+\rm -f haproxy.log && touch haproxy.log
 
-$CMD >& haproxy.log & 
+# Construct the docker run command
+# Explicitly run haproxy in foreground AND keep the container alive with tail -f /dev/null
+CMD="docker run -d --user root:root $EXPOSE --network=$DOCKER_NET --ip=$DOCKER_STATIC_IP \
+    --volume=$(pwd)/config:/usr/local/etc/haproxy/:ro \
+    --name $SELF $IMG \
+    bash -c \"haproxy -f /usr/local/etc/haproxy/haproxy.cfg && tail -f /dev/null\"" # This command ensures HAProxy runs and the container stays active
 
+echo "Executing: $CMD" # Show the command being run
 
+# Execute the command and redirect output to log (no background '&' here, as Docker's -d handles detaching)
+$CMD >& haproxy.log
+
+# If -f argument is provided, tail the log file
+if [ "$1" = "-f" ]; then
+    echo "Tailing haproxy.log..."
+    tail -f haproxy.log
+fi

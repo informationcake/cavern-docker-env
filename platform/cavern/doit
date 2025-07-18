@@ -1,46 +1,45 @@
 #!/bin/bash
+set -e # Exit immediately if a command exits with a non-zero status.
 
-SELF=$(basename $(pwd))
-IMG=cavern:latest
-#IMG="images.opencadc.org/platform/cavern:0.7.5"
+SELF=$(basename "$(pwd)")
+IMG="images.opencadc.org/platform/cavern:0.8.2"
 
-. $HOME/bin/docker-static-ip $SELF
+# Source the static IP script to set DOCKER_STATIC_IP and DOCKER_NET
+. "$HOME/bin/docker-static-ip" "$SELF"
+
 echo "DOCKER_STATIC_IP: $DOCKER_STATIC_IP"
 echo "      DOCKER_NET: $DOCKER_NET"
 
-cat /home/pdowler/work/etc/RsaSignaturePub.key > config/RsaSignaturePub.key
-\cp ~/work/test-certificates/servops.pem config/cadcproxy.pem
-
+# Remove old log file and create a new one
 \rm -f tomcat.log && touch tomcat.log
 
-DATADIR=/data/local/cavern
-if [ ! -d $DATADIR ]; then
-    echo "not found: DATADIR=$DATADIR"
-    exit 1
+# Define local data directory relative to this script and create it
+DATADIR="$(pwd)/../local_data/src-cavern"
+mkdir -p "$DATADIR" # Ensure directory exists
+
+# Get HAProxy's IP for --add-host
+HAP_HOST="haproxy.cadc.dao.nrc.ca"
+HAP_IP=$(docker inspect haproxy | jq -r '.[0].NetworkSettings.Networks."docker26".IPAddress')
+
+if [ -z "$HAP_IP" ]; then
+  echo "Error: Could not get IP address for haproxy container." >&2
+  exit 1
 fi
-EXTRADIR=/data/local/junk
 
-HAP=haproxy.cadc.dao.nrc.ca
-HAPIP=$(grep $HAP /etc/hosts | awk '{print $1}')
-
-PG=caverndb
-PGIP=$(lxc list | grep $PG | awk '{print $6}')
-
-## YES: runs as root internally
+# Construct the docker run command
 CMD="docker run --rm --user root:root \
     --network=$DOCKER_NET --ip=$DOCKER_STATIC_IP \
-    --add-host $HAP:$HAPIP \
-    --add-host $PG:$PGIP \
+    --add-host $HAP_HOST:$HAP_IP \
     --volume=$(pwd)/config:/config:ro \
     --volume=${DATADIR}:/data:rw \
-    --volume=${EXTRADIR}:/extra:ro \
     --name $SELF $IMG"
 
-echo $CMD
+echo "$CMD"
 
+# Execute the command in the background and redirect output to log
 exec $CMD >& tomcat.log &
 
+# If -f argument is provided, tail the log file
 if [ "$1" = "-f" ]; then
     tail -100f tomcat.log
 fi
-
