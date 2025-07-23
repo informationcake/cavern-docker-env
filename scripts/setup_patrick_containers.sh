@@ -46,6 +46,13 @@ openssl req -x509 -nodes -days 365 -newkey rsa:2048 \
 echo "Dummy SSL certificate created at infra/haproxy/config/server-cert.pem."
 echo "Done."
 
+# 6. Extract the public certificate for Java Trust Store compatibility
+echo "Extracting public certificate for src-cavern service..."
+mkdir -p platform/src-cavern/config
+openssl x509 -in infra/haproxy/config/server-cert.pem -out platform/src-cavern/config/haproxy-pub.pem
+echo "Public certificate created at platform/src-cavern/config/haproxy-pub.pem."
+echo "Done."
+
 # REMOVED: Creation of /data/local directories, now handled by individual doit scripts relative to repo.
 
 echo "--- Setup Complete! ---"

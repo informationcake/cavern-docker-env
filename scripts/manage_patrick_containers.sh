@@ -20,7 +20,12 @@ start_services() {
   echo "--- Starting Patrick's Containers ---"
   for dir in "${SERVICE_DIRS[@]}"; do
     echo "Starting service in $dir..."
-    (cd "$dir" && ./doit) # Execute doit script in its directory
+    if (cd "$dir" && ./doit); then # Execute doit script in its directory
+      echo "Started service $dir"
+    else
+      echo "Failed to start $dir"
+      exit 1
+    fi
     sleep 5 # Increased sleep to give containers more time to start/register
     echo "Done."
   done
@@ -33,7 +38,11 @@ stop_services() {
   for (( i=${#SERVICE_DIRS[@]}-1; i>=0; i-- )); do
     dir="${SERVICE_DIRS[$i]}"
     echo "Stopping service in $dir..."
-    (cd "$dir" && ./killit) # Execute killit script in its directory
+    if (cd "$dir" && ./killit); then # Execute killit script in its directory
+      echo "Stopped $dir"
+    else
+      echo "Failed to stop $dir"
+    fi
     sleep 2 # Give some time for container to stop
     echo "Done."
   done
