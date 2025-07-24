@@ -1,0 +1,74 @@
+version: "3"
+
+services:
+  haproxy:
+    image: haproxytech/haproxy-debian:latest
+    container_name: haproxy
+    user: "root:root"
+    networks:
+      docker26:
+        ipv4_address: 172.26.0.2
+    ports:
+      - "443:443"
+    volumes:
+      - ./infra/haproxy/config:/usr/local/etc/haproxy:ro
+    command: >
+      bash -c "haproxy -f /usr/local/etc/haproxy/haproxy.cfg && tail -f /dev/null"
+
+  reg:
+    image: images.opencadc.org/core/reg:1.2.0
+    depends_on:
+      - haproxy
+    container_name: reg
+    user: "tomcat:tomcat"
+    networks:
+      docker26:
+        ipv4_address: 172.26.0.3
+    volumes:
+      - ./infra/reg/config:/config:ro
+      - ./infra/reg/cadc-content:/content:ro
+    extra_hosts:
+      - "haproxy.cadc.dao.nrc.ca:172.26.0.2"
+
+  src-posix-mapper:
+    image: images.opencadc.org/platform/posix-mapper:0.3.1
+    depends_on:
+      - haproxy
+    container_name: src-posix-mapper
+    user: "root:root"
+    networks:
+      docker26:
+        ipv4_address: 172.26.0.61
+    volumes:
+      - ./platform/src-posix-mapper/config:/config:ro
+      - ./platform/src-posix-mapper/../local_data/src-posix-mapper:/data:rw
+    extra_hosts:
+      - "haproxy.cadc.dao.nrc.ca:172.26.0.2"
+
+  src-cavern:
+    image: images.opencadc.org/platform/cavern:0.8.2
+    depends_on:
+      - haproxy
+    container_name: src-cavern
+    user: "root:root"
+    networks:
+      docker26:
+        ipv4_address: 172.26.0.60
+    volumes:
+      - ./platform/src-cavern/config:/config:ro
+      - ./platform/src-cavern/../local_data/src-cavern:/data:rw
+    extra_hosts:
+      - "haproxy.cadc.dao.nrc.ca:172.26.0.2"
+    command: >
+      bash -c "keytool -importcert 
+      -keystore /usr/lib/jvm/java-11-openjdk-11.0.25.0.9-3.fc40.x86_64/lib/security/cacerts
+      -storepass changeit -noprompt -alias haproxy-local -file /config/haproxy-pub.pem
+      && cadc-tomcat-start"
+
+networks:
+  docker26:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.26.0.0/16
+

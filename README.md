@@ -44,6 +44,30 @@ If you need to start a single service to view its logs, navigate to its director
 cd infra/reg/
 ./doit -f
 ```
+***
+
+### Docker Compose version
+May need to stop the 'docker26' network started by the management script first:
+```bash
+docker network rm docker26
+```
+
+```bash
+# Start it up:
+docker-compose up -d
+
+# Check that four containers are running:
+docker container ls
+
+# Check the logs:
+docker logs haproxy # Container is not running a syslog daemon so default logs to /dev/log are not showing
+docker logs reg
+docker logs src-posix-mapper
+docker logs src-cavern
+
+# Stop the containers:
+docker compose down
+```
 
 ***
 
