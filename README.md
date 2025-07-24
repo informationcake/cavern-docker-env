@@ -60,7 +60,7 @@ docker-compose up -d
 docker container ls
 
 # Check the logs:
-docker logs haproxy # Container is not running a syslog daemon so default logs to /dev/log are not showing
+docker logs haproxy
 docker logs reg
 docker logs src-posix-mapper
 docker logs src-cavern
@@ -68,6 +68,11 @@ docker logs src-cavern
 # Stop the containers:
 docker compose down
 ```
+
+Note: 'docker logs haproxy' will show a 'No such file or directory' error. 
+I think this is due to the 'log /dev/log local0 debug' line in `infra/haproxy/config/haproxy.cfg` 
+because the Docker container does not have a syslog deamon and so can not write to /dev/log.
+The configuration file now also includes the 'log stdout format raw local0' line so that the logs should also be sent to stdout for Docker.
 
 ***
 
