@@ -45,10 +45,27 @@ services:
     extra_hosts:
       - "haproxy.cadc.dao.nrc.ca:172.26.0.2"
 
+  srcnodedb:
+    container_name: srcnodedb
+    image: postgres:14
+    networks:
+      docker26:
+        ipv4_address: 172.26.0.50
+    environment:
+      POSTGRES_USER: tapadm
+      POSTGRES_PASSWORD: pw-tapadm
+      POSTGRES_DB: content
+    volumes:
+      - srcnodedb_data:/var/lib/postgresql/data
+      - ./platform/srcnodedb/init-uws.sql:/docker-entrypoint-initdb.d/init-uws-schema.sql:ro
+    extra_hosts:
+      - "haproxy.cadc.dao.nrc.ca:172.26.0.2"
+
   src-cavern:
     image: images.opencadc.org/platform/cavern:0.8.2
     depends_on:
       - haproxy
+      - srcnodedb
     container_name: src-cavern
     user: "root:root"
     networks:
@@ -72,3 +89,5 @@ networks:
       config:
         - subnet: 172.26.0.0/16
 
+volumes:
+  srcnodedb_data:
