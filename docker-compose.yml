@@ -57,7 +57,23 @@ services:
       POSTGRES_DB: content
     volumes:
       - srcnodedb_data:/var/lib/postgresql/data
-      - ./platform/srcnodedb/init-uws.sql:/docker-entrypoint-initdb.d/init-uws-schema.sql:ro
+      - ./platform/srcnodedb/init-uws.sql:/docker-entrypoint-initdb.d/init-uws.sql:ro
+    extra_hosts:
+      - "haproxy.cadc.dao.nrc.ca:172.26.0.2"
+
+  postgres_posixmapper:
+    container_name: postgres_posixmapper
+    image: postgres:14
+    networks:
+      docker26:
+        ipv4_address: 172.26.0.51
+    environment:
+      POSTGRES_USER: cadmin
+      POSTGRES_PASSWORD: pw-cadmin
+      POSTGRES_DB: mapping
+    volumes:
+      - srcnodedb_data:/var/lib/postgresql/data
+      - ./platform/src-posix-mapper/db-init:/docker-entrypoint-initdb.d/:ro
     extra_hosts:
       - "haproxy.cadc.dao.nrc.ca:172.26.0.2"
 
@@ -65,7 +81,8 @@ services:
     image: images.opencadc.org/platform/cavern:0.8.2
     depends_on:
       - haproxy
-      - srcnodedb
+      - postgres_posixmapper
+      - src-posix-mapper
     container_name: src-cavern
     user: "root:root"
     networks:
@@ -91,3 +108,4 @@ networks:
 
 volumes:
   srcnodedb_data:
+  postgres_posixmapper_data:
