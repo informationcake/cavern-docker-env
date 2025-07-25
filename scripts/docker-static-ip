@@ -10,7 +10,8 @@ if [[ "$SELF" == "haproxy" ]]; then
   export DOCKER_STATIC_IP=172.26.0.2
   echo "$SELF: $DOCKER_STATIC_IP"
   echo "      DOCKER_NET: $DOCKER_NET"
-  exit 0 # Exit early, no need to wait for haproxy or get its IP for itself
+  # exit 0 # Exit early, no need to wait for haproxy or get its IP for itself
+  return 0
 fi
 
 # If this script is called by other services, wait for haproxy and get its IP

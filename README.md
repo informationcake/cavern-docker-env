@@ -44,6 +44,35 @@ If you need to start a single service to view its logs, navigate to its director
 cd infra/reg/
 ./doit -f
 ```
+***
+
+### Docker Compose version
+May need to stop the 'docker26' network started by the management script first:
+```bash
+docker network rm docker26
+```
+
+```bash
+# Start it up:
+docker-compose up -d
+
+# Check that four containers are running:
+docker container ls
+
+# Check the logs:
+docker logs haproxy
+docker logs reg
+docker logs src-posix-mapper
+docker logs src-cavern
+
+# Stop the containers:
+docker compose down
+```
+
+Note: 'docker logs haproxy' will show a 'No such file or directory' error. 
+I think this is due to the 'log /dev/log local0 debug' line in `infra/haproxy/config/haproxy.cfg` 
+because the Docker container does not have a syslog deamon and so can not write to /dev/log.
+The configuration file now also includes the 'log stdout format raw local0' line so that the logs should also be sent to stdout for Docker.
 
 ***
 
