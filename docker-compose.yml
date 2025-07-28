@@ -72,7 +72,7 @@ services:
       POSTGRES_PASSWORD: pw-cadmin
       POSTGRES_DB: mapping
     volumes:
-      - srcnodedb_data:/var/lib/postgresql/data
+      - postgres_posixmapper_data:/var/lib/postgresql/data # Ensure this uses a named volume as per previous setup
       - ./platform/src-posix-mapper/db-init:/docker-entrypoint-initdb.d/:ro
     extra_hosts:
       - "haproxy.cadc.dao.nrc.ca:172.26.0.2"
@@ -93,19 +93,91 @@ services:
       - ./platform/src-cavern/../local_data/src-cavern:/data:rw
     extra_hosts:
       - "haproxy.cadc.dao.nrc.ca:172.26.0.2"
+      - "srcnodedb:172.26.0.50" # Added for direct resolution
     command: >
-      bash -c "keytool -importcert 
+      bash -c "keytool -importcert
       -keystore /usr/lib/jvm/java-11-openjdk-11.0.25.0.9-3.fc40.x86_64/lib/security/cacerts
       -storepass changeit -noprompt -alias haproxy-local -file /config/haproxy-pub.pem
       && cadc-tomcat-start"
 
+  # --- SERVICES FOR PREPARE-DATA INTEGRATION ---
+  rabbitmq:
+    container_name: ska-src-local-data-preparer-rabbitmq
+    image: rabbitmq:3.12-management
+    networks:
+      docker26:
+        ipv4_address: 172.26.0.40
+    volumes:
+      - rabbitmq_data:/var/lib/rabbitmq
+
+  core:
+    container_name: ska-src-local-data-preparer-core
+    build:
+      context: ${HOME}/ska-src-dm-local-data-preparer # Ensure this path is correct
+      dockerfile: Dockerfile # Points to the Dockerfile in repo above
+    environment:
+      PREPARE_DATA_APPROACH: cavern_api_approach
+      ABS_PATH_USER_AREA_ROOT: /users/cavern/home
+      ABS_PATH_RSE_ROOT: /rse/deterministic
+      CELERY_BROKER_URL: amqp://guest@rabbitmq//
+      ABS_PATH_CELERY_RESULTS: /var/celery/results
+      CAVERN_API_URL: "https://haproxy:443/src/cavern" # Updated path to Cavern through HAProxy
+      CAVERN_API_TOKEN: "your_local_test_token"
+      ABS_URL_RSE_ROOT: "http://your-rse-webserver-ip:80/rse/deterministic"
+    networks:
+      docker26:
+        ipv4_address: 172.26.0.41 # Assigned a new static IP
+    depends_on:
+      - celery-worker
+      - src-cavern # Depends on the newly integrated src-cavern
+      - haproxy
+      - rabbitmq # Core depends on rabbitmq for Celery tasks
+    volumes:
+      - ./data/cavern_data:/users/cavern/home:rw # Assuming these paths are relative to current repo root
+      - ./data/rse_data:/rse/deterministic:ro
+      - ./logs/celery_results:/var/celery/results:rw
+    extra_hosts: # Added for robust resolution
+      - "haproxy.cadc.dao.nrc.ca:172.26.0.2"
+      - "src-cavern:172.26.0.60" # Explicitly map src-cavern
+      - "rabbitmq:172.26.0.40" # Explicitly map rabbitmq
+
+  celery-worker:
+    container_name: ska-src-local-data-preparer-celery-worker
+    build:
+      context: ${HOME}/ska-src-dm-local-data-preparer # Ensure this path is correct
+      dockerfile: Dockerfile.celery-worker # Points to the Dockerfile in that repo
+    environment:
+      CELERY_BROKER_URL: amqp://guest@rabbitmq//
+      ABS_PATH_CELERY_RESULTS: /var/celery/results
+      CAVERN_API_URL: "https://haproxy:443/src/cavern" # Updated path to Cavern through HAProxy
+      CAVERN_API_TOKEN: "your_local_test_token"
+    command: celery -A prepare_data.worker worker --loglevel=info -c 1
+    networks:
+      docker26:
+        ipv4_address: 172.26.0.42 # Assigned a new static IP
+    depends_on:
+      - rabbitmq
+      - src-cavern # Depends on the newly integrated src-cavern
+      - haproxy
+    volumes:
+      - ./data/cavern_data:/users/cavern/home:rw
+      - ./data/rse_data:/rse/deterministic:ro
+      - ./logs/celery_results:/var/celery/results:rw
+    extra_hosts: # Added for robust resolution
+      - "haproxy.cadc.dao.nrc.ca:172.26.0.2"
+      - "src-cavern:172.26.0.60" # Explicitly map src-cavern
+      - "rabbitmq:172.26.0.40" # Explicitly map rabbitmq
+  # --- END NEW SERVICES ---
+
 networks:
   docker26:
-    driver: bridge
-    ipam:
-      config:
-        - subnet: 172.26.0.0/16
+    external: true
 
 volumes:
   srcnodedb_data:
   postgres_posixmapper_data:
+  rabbitmq_data: # Added for RabbitMQ persistence
+  # Define volumes for prepare-data if not already defined as named volumes (e.g., if just bind mounts)
+  # data_cavern_data: # If you want to use named volume instead of bind mount ./data/cavern_data
+  # data_rse_data:
+  # logs_celery_results:

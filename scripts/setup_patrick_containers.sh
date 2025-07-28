@@ -17,7 +17,7 @@ echo "Done."
 # 3. Create the custom Docker network (docker26)
 echo "Creating Docker network 'docker26' (if it doesn't exist)..."
 if ! docker network ls | grep -q "docker26"; then
-  sudo docker network create \
+  docker network create \
     -d bridge -o "com.docker.network.bridge.name=docker26" \
     --subnet=172.26.0.0/16 docker26
   echo "Network 'docker26' created."
@@ -29,7 +29,7 @@ echo "Done."
 # 4. Add HAProxy hostname to your MacBook's /etc/hosts
 echo "Adding haproxy.cadc.dao.nrc.ca to /etc/hosts (requires sudo)..."
 if ! grep -q "haproxy.cadc.dao.nrc.ca" /etc/hosts; then
-  echo "127.0.0.1 haproxy.cadc.dao.nrc.ca" | sudo tee -a /etc/hosts > /dev/null
+  echo "127.0.0.1 haproxy.cadc.dao.nrc.ca" | tee -a /etc/hosts > /dev/null
   echo "/etc/hosts updated."
 else
   echo "/etc/hosts already contains haproxy.cadc.dao.nrc.ca."
