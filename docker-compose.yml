@@ -17,7 +17,7 @@ services:
     depends_on:
       - cert-gen
     networks:
-      docker26:
+      src-network:
         ipv4_address: 172.26.0.2
     ports:
       - "443:443"
@@ -41,7 +41,7 @@ services:
     container_name: reg
     user: "tomcat:tomcat"
     networks:
-      docker26:
+      src-network:
         ipv4_address: 172.26.0.3
     volumes:
       - ./infra/reg/config:/config:ro
@@ -59,7 +59,7 @@ services:
     container_name: src-posix-mapper
     user: "root:root"
     networks:
-      docker26:
+      src-network:
         ipv4_address: 172.26.0.61
     volumes:
       - ./platform/src-posix-mapper/config:/config:ro
@@ -71,7 +71,7 @@ services:
     container_name: srcnodedb
     image: postgres:14
     networks:
-      docker26:
+      src-network:
         ipv4_address: 172.26.0.50
     environment:
       POSTGRES_USER: tapadm
@@ -87,7 +87,7 @@ services:
     container_name: postgres_posixmapper
     image: postgres:14
     networks:
-      docker26:
+      src-network:
         ipv4_address: 172.26.0.51
     environment:
       POSTGRES_USER: cadmin
@@ -113,7 +113,7 @@ services:
     container_name: src-cavern
     user: "root:root"
     networks:
-      docker26:
+      src-network:
         ipv4_address: 172.26.0.60
     volumes:
       - ./platform/src-cavern/config:/config:ro
@@ -143,7 +143,7 @@ services:
     container_name: ska-src-local-data-preparer-rabbitmq
     image: rabbitmq:3.12-management
     networks:
-      docker26:
+      src-network:
         ipv4_address: 172.26.0.40
     volumes:
       - rabbitmq_data:/var/lib/rabbitmq
@@ -163,7 +163,7 @@ services:
       CAVERN_API_TOKEN: "LOCAL_BYPASS_TOKEN"
       ABS_URL_RSE_ROOT: "http://your-rse-webserver-ip:80/rse/deterministic"
     networks:
-      docker26:
+      src-network:
         ipv4_address: 172.26.0.41
     depends_on:
       - celery-worker
@@ -191,7 +191,7 @@ services:
       CAVERN_API_TOKEN: "LOCAL_BYPASS_TOKEN"
     command: celery -A prepare_data.worker worker --loglevel=info -c 1
     networks:
-      docker26:
+      src-network:
         ipv4_address: 172.26.0.42
     depends_on:
       - rabbitmq
@@ -207,10 +207,10 @@ services:
       - "rabbitmq:172.26.0.40"
 
 networks:
-  docker26:
+  src-network:
     driver: bridge
     driver_opts:
-      com.docker.network.bridge.name: docker26
+      com.docker.network.bridge.name: src-network
     ipam:
       config:
         - subnet: 172.26.0.0/16
