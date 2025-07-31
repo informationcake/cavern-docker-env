@@ -1,6 +1,0 @@
-#!/bin/bash
-
-SELF=$(basename $(pwd))
-
-sudo docker container kill $SELF
-

@@ -1,8 +1,0 @@
-#!/bin/bash
-
-NET=docker26
-
-sudo docker network create \
-	-d bridge -o "com.docker.network.bridge.name=$NET" \
-	--subnet=172.26.0.0/16 $NET
-

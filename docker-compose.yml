@@ -1,19 +1,38 @@
 version: "3"
 
 services:
+  cert-gen:
+    image: alpine:latest
+    container_name: cert-gen
+    command: /scripts/generate-certs.sh
+    volumes:
+      - ./scripts/generate-certs.sh:/scripts/generate-certs.sh
+      - haproxy_cert_data:/certs/haproxy
+      - cavern_cert_data:/certs/src-cavern
+      
   haproxy:
     image: haproxytech/haproxy-debian:latest
     container_name: haproxy
     user: "root:root"
+    depends_on:
+      - cert-gen
     networks:
       docker26:
         ipv4_address: 172.26.0.2
     ports:
       - "443:443"
     volumes:
+      - haproxy_cert_data:/etc/ssl/private/:ro
       - ./infra/haproxy/config:/usr/local/etc/haproxy:ro
     command: >
-      bash -c "haproxy -f /usr/local/etc/haproxy/haproxy.cfg && tail -f /dev/null"
+      bash -c "
+        while [ ! -s /etc/ssl/private/server-cert.pem ]; do
+          echo 'Waiting for server-cert.pem...';
+          sleep 1;
+        done;
+        echo 'Certificate found. Starting HAProxy.';
+        exec haproxy -f /usr/local/etc/haproxy/haproxy.cfg
+      "
 
   reg:
     image: images.opencadc.org/core/reg:1.2.0
@@ -33,7 +52,10 @@ services:
   src-posix-mapper:
     image: images.opencadc.org/platform/posix-mapper:0.3.1
     depends_on:
-      - haproxy
+      postgres_posixmapper:
+        condition: service_healthy
+      haproxy:
+        condition: service_started
     container_name: src-posix-mapper
     user: "root:root"
     networks:
@@ -76,13 +98,18 @@ services:
       - ./platform/src-posix-mapper/db-init:/docker-entrypoint-initdb.d/:ro
     extra_hosts:
       - "haproxy.cadc.dao.nrc.ca:172.26.0.2"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U cadmin -d mapping"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
 
   src-cavern:
     image: images.opencadc.org/platform/cavern:0.8.2
     depends_on:
       - haproxy
-      - postgres_posixmapper
       - src-posix-mapper
+      - cert-gen
     container_name: src-cavern
     user: "root:root"
     networks:
@@ -91,16 +118,27 @@ services:
     volumes:
       - ./platform/src-cavern/config:/config:ro
       - ./platform/src-cavern/../local_data/src-cavern:/data:rw
+      - cavern_cert_data:/ssl-config:ro
     extra_hosts:
       - "haproxy.cadc.dao.nrc.ca:172.26.0.2"
       - "srcnodedb:172.26.0.50"
     command: >
-      bash -c "keytool -importcert
-      -keystore /usr/lib/jvm/java-11-openjdk-11.0.25.0.9-3.fc40.x86_64/lib/security/cacerts
-      -storepass changeit -noprompt -alias haproxy-local -file /config/haproxy-pub.pem
-      && cadc-tomcat-start"
+      bash -c "
+      echo 'Checking for cert file at /ssl-config/haproxy-pub.pem...';
+      while [ ! -s /ssl-config/haproxy-pub.pem ]; do
+        echo 'Waiting for haproxy-pub.pem to appear...';
+        sleep 1;
+      done;
+      echo 'Cert found, importing into Java keystore...';
+      keytool -importcert \
+        -keystore /usr/lib/jvm/java-11-openjdk-11.0.25.0.9-3.fc40.x86_64/lib/security/cacerts \
+        -storepass changeit -noprompt \
+        -alias haproxy-local \
+        -file /ssl-config/haproxy-pub.pem;
+      echo 'Starting CADC Tomcat...';
+      exec cadc-tomcat-start"
 
-  # --- SERVICES FOR PREPARE-DATA INTEGRATION ---
+  # --- Your PREPARE-DATA services remain here ---
   rabbitmq:
     container_name: ska-src-local-data-preparer-rabbitmq
     image: rabbitmq:3.12-management
@@ -122,7 +160,7 @@ services:
       CELERY_BROKER_URL: amqp://guest@rabbitmq//
       ABS_PATH_CELERY_RESULTS: /var/celery/results
       CAVERN_API_URL: "https://haproxy:443/src/cavern"
-      CAVERN_API_TOKEN: "your_local_test_token"
+      CAVERN_API_TOKEN: "LOCAL_BYPASS_TOKEN"
       ABS_URL_RSE_ROOT: "http://your-rse-webserver-ip:80/rse/deterministic"
     networks:
       docker26:
@@ -150,7 +188,7 @@ services:
       CELERY_BROKER_URL: amqp://guest@rabbitmq//
       ABS_PATH_CELERY_RESULTS: /var/celery/results
       CAVERN_API_URL: "https://haproxy:443/src/cavern"
-      CAVERN_API_TOKEN: "your_local_test_token"
+      CAVERN_API_TOKEN: "LOCAL_BYPASS_TOKEN"
     command: celery -A prepare_data.worker worker --loglevel=info -c 1
     networks:
       docker26:
@@ -170,9 +208,16 @@ services:
 
 networks:
   docker26:
-    external: true
+    driver: bridge
+    driver_opts:
+      com.docker.network.bridge.name: docker26
+    ipam:
+      config:
+        - subnet: 172.26.0.0/16
 
 volumes:
   srcnodedb_data:
   postgres_posixmapper_data:
   rabbitmq_data:
+  haproxy_cert_data:
+  cavern_cert_data:
