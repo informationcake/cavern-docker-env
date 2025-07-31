@@ -10,39 +10,15 @@ This project provides a complete, multi-container local development environment 
     * `./data/rse_data`
     * `./logs/celery_results`
 
-***
-
 ## 🚀 One-Time Setup
 
-A setup script automates the entire one-time configuration process. This script creates the custom Docker network, sets up host entries, and generates necessary SSL certificates.
+Services are managed using a `docker-compose.yml` file in the usual way:
 
-From the root of the project, run:
-
-```
-./scripts/setup_patrick_containers.sh
-```
-
-This script will:
-1.  Create a custom Docker network named `docker26` with the `172.26.0.0/16` subnet.
-2.  Copy the `docker-static-ip` utility script to `~/bin/`.
-3.  Generate a self-signed SSL certificate for HAProxy and extract its public part for Java Trust Store compatibility.
-4.  Add `haproxy.cadc.dao.nrc.ca` to your `/etc/hosts` file.
-
-***
-
-## 🛠️ Managing Services
-
-Services are managed using a `docker-compose.yml` file, which is configured to use the `docker26` network created by the one-time setup script.
-
-### To Start All Services:
-
-After completing the One-Time Setup, bring up the entire application stack using Docker Compose:
+Bring up the entire application stack using Docker Compose:
 
 ```
 docker compose up -d
 ```
-
-### To Stop All Services:
 
 To stop and remove all containers, networks, and volumes managed by Docker Compose:
 
@@ -54,7 +30,7 @@ docker compose down --volumes
 
 ## 🧩 Services Overview and Interactions
 
-Your Docker Compose setup orchestrates a comprehensive development environment for Cavern services, now including your `prepare-data` stack. These services are interconnected within the `docker26` network, using static IP addresses for reliable communication.
+Your Docker Compose setup orchestrates a comprehensive development environment for Cavern services, including the `prepare-data` stack. These services are interconnected within the `src-network` network, using static IP addresses for reliable communication.
 
 ### Core Services and Their Interactions
 
@@ -123,24 +99,24 @@ Once all services are running, you can use these `curl` commands from your termi
 
 * **Registry Health Check (GET):** Verifies that HAProxy is routing to the `reg` service correctly.
     ```
-    curl -k [https://haproxy.cadc.dao.nrc.ca/reg/resource-caps](https://haproxy.cadc.dao.nrc.ca/reg/resource-caps)
+    curl -k https://haproxy.cadc.dao.nrc.ca/reg/resource-caps
     ```
 * **Cavern Service (GET & PUT):** Tests reading from and writing to the `src-cavern` service.
     * Get the root node:
         ```
-        curl -k [https://haproxy.cadc.dao.nrc.ca/src/cavern/nodes/](https://haproxy.cadc.dao.nrc.ca/src/cavern/nodes/)
+        curl -k https://haproxy.cadc.dao.nrc.ca/src/cavern/nodes/
         ```
     * Create a new container node:
         ```
-        curl -k -X PUT -H "Content-Type: application/xml" PLACEHOLDER_BACKTICK\
-        -d '<?xml version="1.0" encoding="UTF-8"?><node xmlns="[http://www.ivoa.net/xml/VOSpace/v2.0](http://www.ivoa.net/xml/VOSpace/v2.0)" xsi:type="vs:ContainerNode" xmlns:xsi="[http://www.w3.org/2001/XMLSchema-instance](http://www.w3.org/2001/XMLSchema-instance)" xmlns:vs="[http://www.ivoa.net/xml/VOSpace/v2.0](http://www.ivoa.net/xml/VOSpace/v2.0)"/>' PLACEHOLDER_BACKTICK\
-        [https://haproxy.cadc.dao.nrc.ca/src/cavern/nodes/test_container](https://haproxy.cadc.dao.nrc.ca/src/cavern/nodes/test_container)
+        curl -k -X PUT -H "Content-Type: application/xml" \
+        -d '<?xml version="1.0" encoding="UTF-8"?><node xmlns="http://www.ivoa.net/xml/VOSpace/v2.0" xsi:type="vs:ContainerNode" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:vs="[http://www.ivoa.net/xml/VOSpace/v2.0](http://www.ivoa.net/xml/VOSpace/v2.0)"/>' \
+        https://haproxy.cadc.dao.nrc.ca/src/cavern/nodes/test_container
         ```
 * **POSIX Mapper Service (GET):** Tests the `src-posix-mapper` service by requesting user data.
     ```
-    curl -k [https://haproxy.cadc.dao.nrc.ca/src/posix-mapper/users/pdowler](https://haproxy.cadc.dao.nrc.ca/src/posix-mapper/users/pdowler)
+    curl -k https://haproxy.cadc.dao.nrc.ca/src/posix-mapper/users/testuser
     ```
-    *Note:* A `404 Not Found` response is expected and indicates success if the user does not exist in the database.
+    *Note:* A `404 Not Found` response is expected if the user does not exist in the database.
 
 #### 2. Prepare-Data Service (Core & Celery Worker):
 
