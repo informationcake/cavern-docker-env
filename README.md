@@ -4,7 +4,7 @@ This project provides a complete, multi-container local development environment 
 
 ## Prerequisites
 * Docker and Docker Desktop installed and running.
-* The `ska-src-dm-local-data-preparer` repository cloned to your `${HOME}` directory (as specified in `docker-compose.yml` build contexts).
+* The [`ska-src-dm-local-data-preparer`](https://gitlab.com/ska-telescope/src/src-dm/ska-src-dm-local-data-preparer) repository cloned to your `${HOME}` directory (as specified in `docker-compose.yml` build contexts).
 * Required local data directories for services:
     * `./data/cavern_data`
     * `./data/rse_data`
