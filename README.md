@@ -106,12 +106,12 @@ Once all services are running, you can use these `curl` commands from your termi
         ```
         curl -k https://haproxy.cadc.dao.nrc.ca/src/cavern/nodes/
         ```
-    * Create a new container node:
+    * Create a new container node (you'll need to generate a Bearer $SKA_TOKEN via oidc or similar methods)
         ```
-        curl -k -X PUT -H "Content-Type: application/xml" \
-        -d '<?xml version="1.0" encoding="UTF-8"?><node xmlns="http://www.ivoa.net/xml/VOSpace/v2.0" xsi:type="vs:ContainerNode" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:vs="[http://www.ivoa.net/xml/VOSpace/v2.0](http://www.ivoa.net/xml/VOSpace/v2.0)"/>' \
-        https://haproxy.cadc.dao.nrc.ca/src/cavern/nodes/test_container
+        curl -k -X PUT -H "Content-Type: application/xml" -H "Authorization: Bearer $SKA_TOKEN" -d '<?xml version="1.0" encoding="UTF-8"?><node xmlns="http://www.ivoa.net/xml/VOSpace/v2.0" uri="vos://opencadc.org~src~cavern/test_container" xsi:type="vs:ContainerNode" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:vs="http://www.ivoa.net/xml/VOSpace/v2.0"><vos:nodes xmlns:vos="http://www.ivoa.net/xml/VOSpace/v2.0"/></node>' https://haproxy.cadc.dao.nrc.ca/src/cavern/nodes/test_container
         ```
+   errors: the issue is that when the postgres_posixmapper container starts, it automatically runs the SQL scripts it finds in the ./platform/src-posix-mapper/db-init/ directory. then afterwards the src-posix-mapper application starts which has its own, internal, hard-coded logic to create the database tables. i think it crashes because the application tries to create tables that the database container has already created, resulting in an ERROR: relation "..." already exists. i thought adding if not exist statements in platform/src-posix-mapper/db-init/01-init-schema.sql would fix it but it seems not.
+
 * **POSIX Mapper Service (GET):** Tests the `src-posix-mapper` service by requesting user data.
     ```
     curl -k https://haproxy.cadc.dao.nrc.ca/src/posix-mapper/users/testuser
@@ -120,7 +120,7 @@ Once all services are running, you can use these `curl` commands from your termi
 
 #### 2. Prepare-Data Service (Core & Celery Worker):
 
-WORK IN PROGRESS
+WORK IN PROGRESS - ignore for now, not properly debugged due to blockers above.
 
 To test the `prepare-data` service, you'll typically submit tasks to the `core` service. Since `core` is not exposed on your host, you'll execute `curl` commands from inside another container on the same Docker network (e.g., `haproxy`).
 
