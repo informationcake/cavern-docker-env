@@ -46,8 +46,16 @@ services:
     volumes:
       - ./infra/reg/config:/config:ro
       - ./infra/reg/cadc-content:/content:ro
+      - cavern_cert_data:/ssl-config:ro
     extra_hosts:
       - "haproxy.cadc.dao.nrc.ca:172.26.0.2"
+    command: >
+      bash -c "
+      while [ ! -s /ssl-config/haproxy-pub.pem ]; do sleep 1; done;
+      chmod o+w /usr/lib/jvm/java-11-openjdk-11.0.25.0.9-3.fc40.x86_64/lib/security/cacerts;
+      keytool -importcert -noprompt -keystore /usr/lib/jvm/java-11-openjdk-11.0.25.0.9-3.fc40.x86_64/lib/security/cacerts -storepass changeit -alias haproxy-local -file /ssl-config/haproxy-pub.pem;
+      chmod o-w /usr/lib/jvm/java-11-openjdk-11.0.25.0.9-3.fc40.x86_64/lib/security/cacerts;
+      exec cadc-tomcat-start"
 
   src-posix-mapper:
     image: images.opencadc.org/platform/posix-mapper:0.3.1
@@ -64,8 +72,14 @@ services:
     volumes:
       - ./platform/src-posix-mapper/config:/config:ro
       - ./platform/src-posix-mapper/../local_data/src-posix-mapper:/data:rw
+      - cavern_cert_data:/ssl-config:ro
     extra_hosts:
       - "haproxy.cadc.dao.nrc.ca:172.26.0.2"
+    command: >
+      bash -c "
+      while [ ! -s /ssl-config/haproxy-pub.pem ]; do sleep 1; done;
+      keytool -importcert -noprompt -keystore /usr/lib/jvm/java-11-openjdk-11.0.25.0.9-3.fc40.x86_64/lib/security/cacerts -storepass changeit -alias haproxy-local -file /ssl-config/haproxy-pub.pem;
+      exec cadc-tomcat-start"
 
   srcnodedb:
     container_name: srcnodedb
@@ -124,6 +138,7 @@ services:
       - "srcnodedb:172.26.0.50"
     command: >
       bash -c "
+<<<<<<< Updated upstream
       echo 'Checking for cert file at /ssl-config/haproxy-pub.pem...';
       while [ ! -s /ssl-config/haproxy-pub.pem ]; do
         echo 'Waiting for haproxy-pub.pem to appear...';
@@ -136,6 +151,10 @@ services:
         -alias haproxy-local \
         -file /ssl-config/haproxy-pub.pem;
       echo 'Starting CADC Tomcat...';
+=======
+      while [ ! -s /ssl-config/haproxy-pub.pem ]; do sleep 1; done;
+      keytool -importcert -noprompt -keystore /usr/lib/jvm/java-21-openjdk/lib/security/cacerts -storepass changeit -alias haproxy-local -file /ssl-config/haproxy-pub.pem;
+>>>>>>> Stashed changes
       exec cadc-tomcat-start"
 
   # --- Your PREPARE-DATA services remain here ---
