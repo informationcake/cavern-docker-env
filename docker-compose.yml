@@ -108,8 +108,8 @@ services:
       POSTGRES_PASSWORD: pw-cadmin
       POSTGRES_DB: mapping
     volumes:
+      - ./platform/src-posix-mapper/db-init/schema:/docker-entrypoint-initdb.d/:ro
       - postgres_posixmapper_data:/var/lib/postgresql/data
-      - ./platform/src-posix-mapper/db-init:/docker-entrypoint-initdb.d/:ro
     extra_hosts:
       - "haproxy.cadc.dao.nrc.ca:172.26.0.2"
     healthcheck:
@@ -141,6 +141,28 @@ services:
       while [ ! -s /ssl-config/haproxy-pub.pem ]; do sleep 1; done;
       keytool -importcert -noprompt -keystore /usr/lib/jvm/java-21-openjdk/lib/security/cacerts -storepass changeit -alias haproxy-local -file /ssl-config/haproxy-pub.pem;
       exec cadc-tomcat-start"
+
+  db-user-adder:
+    image: postgres:14
+    container_name: db-user-adder
+    depends_on:
+      src-posix-mapper:
+        condition: service_started
+    networks:
+      - src-network
+    volumes:
+      - ./platform/src-posix-mapper/db-init/data:/db-init-data:ro
+    command: >
+      bash -c "
+        apt-get update && apt-get install -y postgresql-client;
+        until PGPASSWORD=pw-cadmin psql -h postgres_posixmapper -U cadmin -d mapping -c 'SELECT 1 FROM posixmap.users' > /dev/null 2>&1; do
+          >&2 echo 'Waiting for posixmap.users table to be created...';
+          sleep 2;
+        done;
+        >&2 echo 'posixmap.users table is ready, adding test user...';
+        PGPASSWORD=pw-cadmin psql -h postgres_posixmapper -U cadmin -d mapping -f /db-init-data/02-add-test-user.sql;
+        echo 'User script finished.';
+      "
 
   # --- Your PREPARE-DATA services remain here ---
   rabbitmq:
