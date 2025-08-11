@@ -106,17 +106,15 @@ Once all services are running, you can use these `curl` commands from your termi
         ```
         curl -k https://haproxy.cadc.dao.nrc.ca/src/cavern/nodes/
         ```
-    * Create a new container node as default testuser
+    * Create a new container node as your user (must replace username in command):
         ```
-        curl -k -X PUT -H "Content-Type: application/xml" -H "X-AD-User: testuser" -d '<?xml version="1.0" encoding="UTF-8"?><node xmlns="http://www.ivoa.net/xml/VOSpace/v2.0" uri="vos://opencadc.org~src~cavern/test_container" xsi:type="vs:ContainerNode" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:vs="http://www.ivoa.net/xml/VOSpace/v2.0"><vos:nodes xmlns:vos="http://www.ivoa.net/xml/VOSpace/v2.0"/></node>' https://haproxy.cadc.dao.nrc.ca/src/cavern/nodes/test_container
+        curl -k -X PUT -H "Authorization: Bearer $SKA_TOKEN" -H "Content-Type: application/xml" -d '<?xml version="1.0" encoding="UTF-8"?><node xmlns="http://www.ivoa.net/xml/VOSpace/v2.0" uri="vos://skao.int~src~cavern/alexclarke_new_container" xsi:type="vs:ContainerNode" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:vs="http://www.ivoa.net/xml/VOSpace/v2.0"><vos:nodes xmlns:vos="http://www.ivoa.net/xml/VOSpace/v2.0"/></node>' https://localhost/src/cavern/nodes/alexclarke_new_container
         ```
-   errors: the issue is that when the postgres_posixmapper container starts, it automatically runs the SQL scripts it finds in the ./platform/src-posix-mapper/db-init/ directory. then afterwards the src-posix-mapper application starts which has its own, internal, hard-coded logic to create the database tables. i think it crashes because the application tries to create tables that the database container has already created, resulting in an ERROR: relation "..." already exists. i thought adding if not exist statements in platform/src-posix-mapper/db-init/01-init-schema.sql would fix it but it seems not.
 
 * **POSIX Mapper Service (GET):** Tests the `src-posix-mapper` service by requesting user data.
     ```
-    curl -k https://haproxy.cadc.dao.nrc.ca/src/posix-mapper/users/testuser
+    curl -k https://haproxy.cadc.dao.nrc.ca/src/posix-mapper/users/username
     ```
-    *Note:* A `404 Not Found` response is expected if the user does not exist in the database.
 
 #### 2. Prepare-Data Service (Core & Celery Worker):
 
