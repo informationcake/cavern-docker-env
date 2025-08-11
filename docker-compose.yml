@@ -143,7 +143,7 @@ services:
 
   src-cavern:
     platform: linux/amd64
-    image: images.opencadc.org/platform/cavern:0.8.3
+    image: at88mph/cavern:0.8.4-20250801T213007
     depends_on:
       cert-gen:
         condition: service_completed_successfully
