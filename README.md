@@ -1,14 +1,6 @@
 # Cavern Docker Environment
 
-This project provides a complete, multi-container local development environment for the Cavern services, now including the `prepare-data` service, fully orchestrated with Docker.
-
-## Prerequisites
-* Docker and Docker Desktop installed and running.
-* The [`ska-src-dm-local-data-preparer`](https://gitlab.com/ska-telescope/src/src-dm/ska-src-dm-local-data-preparer) repository cloned to your `${HOME}` directory (as specified in `docker-compose.yml` build contexts).
-* Required local data directories for services:
-    * `./data/cavern_data`
-    * `./data/rse_data`
-    * `./logs/celery_results`
+This project provides a complete, multi-container local development environment for the Cavern services, fully orchestrated with Docker Compose.
 
 ## 🚀 One-Time Setup
 
