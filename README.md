@@ -73,36 +73,17 @@ Your Docker Compose setup orchestrates a comprehensive development environment f
     * **Purpose:** The core VOSpace service. It provides VOSpace functionality, including node management and data transfers.
     * **Interactions:** Relies on `srcnodedb` for its UWS database. It interacts with `src-posix-mapper` for user identity resolution. It receives API calls via HAProxy. When the `prepare-data` service uses the `cavern_api_approach`, `src-cavern` performs the actual data pulling from `rse-web`.
 
-### Prepare-Data Services and Their Interactions
-
-7.  **`rabbitmq`** (Container Name: `ska-src-local-data-preparer-rabbitmq`):
-    * **Purpose:** A message broker for Celery tasks. It facilitates asynchronous communication between the `core` API service and the `celery-worker`.
-    * **Interactions:** `core` dispatches tasks to `rabbitmq`, and `celery-worker` consumes tasks from `rabbitmq`.
-
-8.  **`core`** (Container Name: `ska-src-local-data-preparer-core`):
-    * **Purpose:** The main `prepare-data` FastAPI REST API. It receives data staging requests, authenticates users, and dispatches these requests as asynchronous tasks to the `celery-worker` via `rabbitmq`.
-    * **Interactions:** Communicates with `celery-worker` via `rabbitmq`. When processing requests, it prepares task arguments that include API details (`CAVERN_API_URL`, `CAVERN_API_TOKEN`) and the source URL for RSE data (`ABS_URL_RSE_ROOT`), which are passed to the `celery-worker`.
-
-9.  **`celery-worker`** (Container Name: `ska-src-local-data-preparer-celery-worker`):
-    * **Purpose:** Executes the actual data preparation tasks (e.g., staging data to Cavern) in the background, as instructed by the `core` service.
-    * **Interactions:** Connects to `rabbitmq` to fetch tasks. When running the `cavern_api_approach`, it uses the `CavernApiClient` to make API calls to `src-cavern` (via HAProxy). Crucially, when `CavernApiClient` tells `src-cavern` to pull data via `httpget`, `src-cavern` will fetch data from `rse-web`.
-
-10. **`rse-web`** (Container Name: `rse-web`):
-    * **Purpose:** A simple Nginx web server specifically for local development that serves the RSE (source) data via HTTP.
-    * **Interactions:** It exposes the local `data/rse_data` bind mount over HTTP. `src-cavern` (when instructed by the `celery-worker` via the `cavern_api_approach`) makes HTTP GET requests to `rse-web` to pull the actual data files.
-
 ### Overall Data Flow
 
 1.  External requests (e.g., `curl` commands from your terminal) come to `haproxy:443`.
-2.  HAProxy routes data preparation requests to `ska-src-local-data-preparer-core:8000`.
-3.  `core` receives the request, authenticates, and dispatches a data preparation task to `rabbitmq`.
-4.  `celery-worker` picks up the task from `rabbitmq`.
-5.  `celery-worker` (using the `cavern_api_approach`) initiates an API call to `src-cavern` (via HAProxy) to request a data transfer.
-6.  `src-cavern`, upon receiving the `pullToVoSpace` instruction, makes an `httpget` request to `rse-web` to fetch the data.
-7.  `rse-web` serves the file content from the locally mounted RSE data.
-8.  `src-cavern` pulls the data and stages it into its VOSpace (which uses its `srcnodedb` database and local filesystem mounts).
-9.  `celery-worker` monitors the task completion and reports status back to `core` via `rabbitmq`.
-10. `core` can then provide the task status to the original requester.
+2.  HAProxy authenticates the request and routes it to the appropriate backend service based on the URL path (e.g., requests to `/src/cavern` go to the `src-cavern` service).
+3.  The `src-cavern` service receives the request (e.g., to create a new folder).
+4.  To handle the request, `src-cavern` communicates with other backend services:
+    * It queries `src-posix-mapper` to get the user's POSIX file permissions (UID/GID).
+    * `src-posix-mapper` retrieves this information from its `postgres_posixmapper` database.
+5.  `src-cavern` writes the new folder's metadata to its own `srcnodedb` database.
+6.  `src-cavern` creates the actual folder on the local disk via its bind mount.
+7.  A success (or error) response is sent back through HAProxy to the user's terminal.
 
 ***
 
