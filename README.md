@@ -12,9 +12,24 @@ This project provides a complete, multi-container local development environment 
 
 ## 🚀 One-Time Setup
 
-Services are managed using a `docker-compose.yml` file in the usual way:
+Services are managed using a `docker-compose.yml` file in the usual way, but you'll need to set your username. First tell the cavern service who the root owner of the VOSpace is. Edit: `platform/src-cavern/config/cavern.properties` and replace the username with your username that you use for SKA IAM (oidc-token) in the two places shown:
 
-Bring up the entire application stack using Docker Compose:
+```
+# platform/src-cavern/config/cavern.properties
+org.opencadc.cavern.filesystem.rootOwner = NEW_USERNAME_HERE
+org.opencadc.cavern.filesystem.rootOwner.username = NEW_USERNAME_HERE
+# ... (other properties remain the same) ...
+```
+
+Now update the Database Initialization Script, adding the new user and their default group to the posix-mapper database when the services first start. Edit: platform/src-posix-mapper/db-init/data/01-add-test-user.sql and replace the existing username:
+
+```
+#platform/src-posix-mapper/db-init/data/01-add-test-user.sql
+INSERT INTO posixmap.users (username) VALUES ('NEW_USERNAME_HERE') ON CONFLICT (username) DO NOTHING;
+INSERT INTO posixmap.groups (groupuri) VALUES ('ivo://skao.int/groups/NEW_USERNAME_HERE') ON CONFLICT (groupuri) DO NOTHING;
+```
+
+Now bring up the entire application stack using Docker Compose:
 
 ```
 docker compose up -d
@@ -114,51 +129,4 @@ Once all services are running, you can use these `curl` commands from your termi
 * **POSIX Mapper Service (GET):** Tests the `src-posix-mapper` service by requesting user data.
     ```
     curl -k https://haproxy.cadc.dao.nrc.ca/src/posix-mapper/users/username
-    ```
-
-#### 2. Prepare-Data Service (Core & Celery Worker):
-
-WORK IN PROGRESS - ignore for now, not properly debugged due to blockers above.
-
-To test the `prepare-data` service, you'll typically submit tasks to the `core` service. Since `core` is not exposed on your host, you'll execute `curl` commands from inside another container on the same Docker network (e.g., `haproxy`).
-
-* **Prerequisites for `cavern_api_approach`:**
-    * Ensure `PREPARE_DATA_APPROACH: cavern_api_approach` is set in your `docker-compose.yml` for `core` and `celery-worker`.
-    * Ensure `ABS_URL_RSE_ROOT` is correctly configured in `docker-compose.yml` to point to your `rse-web` service (e.g., `http://rse-web:80/rse/deterministic`).
-    * Place a test file (e.g., `prepare_data_test.txt`) at the correct path within your `./data/rse_data/testing/84/1c/` directory, so `rse-web` can serve it.
-    * You will need a valid `SKA_IAM_TOKEN`.
-
-* **Submit a Data Preparation Task:**
-    This will trigger the `prepare_data_task` using the `cavern_api_approach`.
-    ```
-    docker exec haproxy curl -X 'POST' \
-      -H 'accept: application/json' \
-      -H 'Content-Type: application/json' \
-      -H 'Authorization: Bearer SKA_IAM_TOKEN' \
-      -d '[
-        [
-          "testing:prepare_data_test.txt",
-          "testing/84/1c/prepare_data_test.txt",
-          "./testing"
-        ]
-      ]' \
-      http://ska-src-local-data-preparer-core:8000/
-    ```
-    *Expected result:* A JSON response containing a `task_id` (e.g., `{"task_id":"..."}`).
-
-* **Check the Status of the Submitted Task:**
-    Replace `YOUR_TASK_ID` with the ID obtained from the previous step.
-    ```
-    docker exec haproxy curl -X 'GET' \
-      -H 'accept: application/json' \
-      -H 'Authorization: Bearer SKA_IAM_TOKEN' \
-      http://ska-src-local-data-preparer-core:8000/YOUR_TASK_ID
-    ```
-    *Expected result:* `{"status":"SUCCESS","info":"Data provisioning successful"}` (or `PENDING`/`STARTED` if not yet complete).
-
-* **Monitor Logs for Execution Details:**
-    Check the logs of `celery-worker` and `src-cavern` for messages from your `CavernApiApproach` (e.g., "Ensuring user directory...", "Staging file from...", "Successfully staged file...") and Cavern's response.
-    ```
-    docker logs ska-src-local-data-preparer-celery-worker
-    docker logs src-cavern
     ```
