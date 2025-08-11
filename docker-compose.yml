@@ -1,10 +1,12 @@
-version: "3"
+version: "3.5"
 
 services:
   cert-gen:
     image: alpine:latest
     container_name: cert-gen
     command: /scripts/generate-certs.sh
+    networks:
+      - src-network
     volumes:
       - ./scripts/generate-certs.sh:/scripts/generate-certs.sh
       - haproxy_cert_data:/certs/haproxy
@@ -15,10 +17,10 @@ services:
     container_name: haproxy
     user: "root:root"
     depends_on:
-      - cert-gen
+      cert-gen:
+        condition: service_completed_successfully
     networks:
-      src-network:
-        ipv4_address: 172.26.0.2
+      - src-network
     ports:
       - "443:443"
     volumes:
@@ -26,125 +28,64 @@ services:
       - ./infra/haproxy/config:/usr/local/etc/haproxy:ro
     command: >
       bash -c "
-        while [ ! -s /etc/ssl/private/server-cert.pem ]; do
-          echo 'Waiting for server-cert.pem...';
-          sleep 1;
-        done;
-        echo 'Certificate found. Starting HAProxy.';
         exec haproxy -f /usr/local/etc/haproxy/haproxy.cfg
       "
+    healthcheck:
+      test: [ "CMD-SHELL", "curl -sk https://localhost >/dev/null" ]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+      start_period: 10s
 
   reg:
+    platform: linux/amd64
     image: images.opencadc.org/core/reg:1.2.0
     depends_on:
-      - haproxy
+      cert-gen:
+        condition: service_completed_successfully
+      haproxy:
+        condition: service_healthy
     container_name: reg
     user: "tomcat:tomcat"
     networks:
-      src-network:
-        ipv4_address: 172.26.0.3
+      - src-network
     volumes:
       - ./infra/reg/config:/config:ro
       - ./infra/reg/cadc-content:/content:ro
       - cavern_cert_data:/ssl-config:ro
-    extra_hosts:
-      - "haproxy.cadc.dao.nrc.ca:172.26.0.2"
     command: >
       bash -c "
-      while [ ! -s /ssl-config/haproxy-pub.pem ]; do sleep 1; done;
-      chmod o+w /usr/lib/jvm/java-11-openjdk-11.0.25.0.9-3.fc40.x86_64/lib/security/cacerts;
-      keytool -importcert -noprompt -keystore /usr/lib/jvm/java-11-openjdk-11.0.25.0.9-3.fc40.x86_64/lib/security/cacerts -storepass changeit -alias haproxy-local -file /ssl-config/haproxy-pub.pem;
-      chmod o-w /usr/lib/jvm/java-11-openjdk-11.0.25.0.9-3.fc40.x86_64/lib/security/cacerts;
-      exec cadc-tomcat-start"
+        keytool -importcert -noprompt -keystore /usr/lib/jvm/java-11-openjdk-11.0.25.0.9-3.fc40.x86_64/lib/security/cacerts -storepass changeit -alias haproxy-local -file /ssl-config/haproxy-pub.pem;
+        exec cadc-tomcat-start
+      "
 
   src-posix-mapper:
+    platform: linux/amd64
     image: images.opencadc.org/platform/posix-mapper:0.3.1
     depends_on:
+      cert-gen:
+        condition: service_completed_successfully
+      haproxy:
+        condition: service_healthy
       postgres_posixmapper:
         condition: service_healthy
-      haproxy:
-        condition: service_started
     container_name: src-posix-mapper
     user: "root:root"
     networks:
-      src-network:
-        ipv4_address: 172.26.0.61
+      - src-network
     volumes:
       - ./platform/src-posix-mapper/config:/config:ro
       - ./platform/src-posix-mapper/../local_data/src-posix-mapper:/data:rw
       - cavern_cert_data:/ssl-config:ro
-    extra_hosts:
-      - "haproxy.cadc.dao.nrc.ca:172.26.0.2"
     command: >
       bash -c "
-      while [ ! -s /ssl-config/haproxy-pub.pem ]; do sleep 1; done;
-      keytool -importcert -noprompt -keystore /usr/lib/jvm/java-11-openjdk-11.0.25.0.9-3.fc40.x86_64/lib/security/cacerts -storepass changeit -alias haproxy-local -file /ssl-config/haproxy-pub.pem;
-      exec cadc-tomcat-start"
+        keytool -importcert -noprompt -keystore /usr/lib/jvm/java-11-openjdk-11.0.25.0.9-3.fc40.x86_64/lib/security/cacerts -storepass changeit -alias haproxy-local -file /ssl-config/haproxy-pub.pem;
+        exec cadc-tomcat-start
+      "
 
-  srcnodedb:
-    container_name: srcnodedb
+  src-posix-mapper-post:
     image: postgres:14
-    networks:
-      src-network:
-        ipv4_address: 172.26.0.50
-    environment:
-      POSTGRES_USER: tapadm
-      POSTGRES_PASSWORD: pw-tapadm
-      POSTGRES_DB: content
-    volumes:
-      - srcnodedb_data:/var/lib/postgresql/data
-      - ./platform/srcnodedb/init-uws.sql:/docker-entrypoint-initdb.d/init-uws.sql:ro
-    extra_hosts:
-      - "haproxy.cadc.dao.nrc.ca:172.26.0.2"
-
-  postgres_posixmapper:
-    container_name: postgres_posixmapper
-    image: postgres:14
-    networks:
-      src-network:
-        ipv4_address: 172.26.0.51
-    environment:
-      POSTGRES_USER: cadmin
-      POSTGRES_PASSWORD: pw-cadmin
-      POSTGRES_DB: mapping
-    volumes:
-      - ./platform/src-posix-mapper/db-init/schema:/docker-entrypoint-initdb.d/:ro
-      - postgres_posixmapper_data:/var/lib/postgresql/data
-    extra_hosts:
-      - "haproxy.cadc.dao.nrc.ca:172.26.0.2"
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U cadmin -d mapping"]
-      interval: 5s
-      timeout: 5s
-      retries: 5
-
-  src-cavern:
-    image: images.opencadc.org/platform/cavern:0.8.3
-    depends_on:
-      - haproxy
-      - src-posix-mapper
-      - cert-gen
-    container_name: src-cavern
-    user: "root:root"
-    networks:
-      src-network:
-        ipv4_address: 172.26.0.60
-    volumes:
-      - ./platform/src-cavern/config:/config:ro
-      - ./platform/src-cavern/../local_data/src-cavern:/data:rw
-      - cavern_cert_data:/ssl-config:ro
-    extra_hosts:
-      - "haproxy.cadc.dao.nrc.ca:172.26.0.2"
-      - "srcnodedb:172.26.0.50"
-    command: >
-      bash -c "
-      while [ ! -s /ssl-config/haproxy-pub.pem ]; do sleep 1; done;
-      keytool -importcert -noprompt -keystore /usr/lib/jvm/java-21-openjdk/lib/security/cacerts -storepass changeit -alias haproxy-local -file /ssl-config/haproxy-pub.pem;
-      exec cadc-tomcat-start"
-
-  db-user-adder:
-    image: postgres:14
-    container_name: db-user-adder
+    container_name: src-posix-mapper-post
     depends_on:
       src-posix-mapper:
         condition: service_started
@@ -155,91 +96,160 @@ services:
     command: >
       bash -c "
         apt-get update && apt-get install -y postgresql-client;
-        until PGPASSWORD=pw-cadmin psql -h postgres_posixmapper -U cadmin -d mapping -c 'SELECT 1 FROM posixmap.users' > /dev/null 2>&1; do
+        until PGPASSWORD=password psql -h postgres_posixmapper -U admin -d mapping -c 'SELECT 1 FROM posixmap.users' > /dev/null 2>&1; do
           >&2 echo 'Waiting for posixmap.users table to be created...';
           sleep 2;
         done;
-        >&2 echo 'posixmap.users table is ready, adding test user...';
-        PGPASSWORD=pw-cadmin psql -h postgres_posixmapper -U cadmin -d mapping -f /db-init-data/02-add-test-user.sql;
+        >&2 echo 'posixmap.users table is ready, adding test user and group...';
+        PGPASSWORD=password psql -h postgres_posixmapper -U admin -d mapping -f /db-init-data/01-add-test-user.sql;
         echo 'User script finished.';
       "
 
-  # --- Your PREPARE-DATA services remain here ---
-  rabbitmq:
-    container_name: ska-src-local-data-preparer-rabbitmq
-    image: rabbitmq:3.12-management
+  srcnodedb:
+    image: postgres:14
+    container_name: srcnodedb
     networks:
-      src-network:
-        ipv4_address: 172.26.0.40
+      - src-network
+    environment:
+      POSTGRES_USER: tapadm
+      POSTGRES_PASSWORD: pw-tapadm
+      POSTGRES_DB: content
+    volumes:
+      - srcnodedb_data:/var/lib/postgresql/data
+      - ./platform/srcnodedb/init-uws.sql:/docker-entrypoint-initdb.d/init-uws.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U tapadm -d content"]
+      interval: 10s
+      timeout: 10s
+      retries: 5
+
+  postgres_posixmapper:
+    image: postgres:14
+    container_name: postgres_posixmapper
+    networks:
+      - src-network
+    environment:
+      POSTGRES_USER: admin
+      POSTGRES_PASSWORD: password
+      POSTGRES_DB: mapping
+    volumes:
+      - ./platform/postgres_posixmapper/db-init/schema:/docker-entrypoint-initdb.d/:ro
+      - postgres_posixmapper_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U admin -d mapping"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  src-cavern:
+    platform: linux/amd64
+    image: images.opencadc.org/platform/cavern:0.8.3
+    depends_on:
+      cert-gen:
+        condition: service_completed_successfully
+      haproxy:
+        condition: service_healthy
+      src-posix-mapper:
+        condition: service_started
+      srcnodedb:
+        condition: service_healthy
+    container_name: src-cavern
+    user: "root:root"
+    networks:
+      - src-network
+    volumes:
+      - ./platform/src-cavern/config:/config:ro
+      - ./platform/src-cavern/../local_data/src-cavern:/data:rw
+      - cavern_cert_data:/ssl-config:ro
+      - ./data/rse_data:/cavern_rse_data:ro
+    command: >
+      bash -c "
+        keytool -importcert -noprompt -keystore /usr/lib/jvm/java-21-openjdk/lib/security/cacerts -storepass changeit -alias haproxy-local -file /ssl-config/haproxy-pub.pem;
+        exec cadc-tomcat-start
+      "
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:8080/src/cavern/nodes/ || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 60s
+
+  # --- PREPARE-DATA services ---
+  rabbitmq:
+    image: rabbitmq:3.12-management
+    container_name: ska-src-local-data-preparer-rabbitmq
+    networks:
+      - src-network
     volumes:
       - rabbitmq_data:/var/lib/rabbitmq
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "check_running", "-q"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
 
   core:
     container_name: ska-src-local-data-preparer-core
     build:
       context: ${HOME}/ska-src-dm-local-data-preparer
       dockerfile: Dockerfile
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+      src-cavern:
+        condition: service_healthy
+      celery-worker:
+        condition: service_started
     environment:
       PREPARE_DATA_APPROACH: cavern_api_approach
       ABS_PATH_USER_AREA_ROOT: /users/cavern/home
       ABS_PATH_RSE_ROOT: /rse/deterministic
       CELERY_BROKER_URL: amqp://guest@rabbitmq//
       ABS_PATH_CELERY_RESULTS: /var/celery/results
-      CAVERN_API_URL: "https://haproxy:443/src/cavern"
-      CAVERN_API_TOKEN: "LOCAL_BYPASS_TOKEN"
-      ABS_URL_RSE_ROOT: "http://your-rse-webserver-ip:80/rse/deterministic"
+      CAVERN_API_URL: "https://haproxy/src/cavern"
+      CAVERN_API_TOKEN: "api-key prepareData:secret"
+      CAVERN_RESOURCE_ID: "ivo://skao.int/src/cavern"
+      CAVERN_API_SSL_VERIFY: "false"
+      SKA_TOKEN: "${SKA_TOKEN}"
     networks:
-      src-network:
-        ipv4_address: 172.26.0.41
-    depends_on:
-      - celery-worker
-      - src-cavern
-      - haproxy
-      - rabbitmq
+      - src-network
     volumes:
       - ./data/cavern_data:/users/cavern/home:rw
       - ./data/rse_data:/rse/deterministic:ro
       - ./logs/celery_results:/var/celery/results:rw
-    extra_hosts:
-      - "haproxy.cadc.dao.nrc.ca:172.26.0.2"
-      - "src-cavern:172.26.0.60"
-      - "rabbitmq:172.26.0.40"
 
   celery-worker:
     container_name: ska-src-local-data-preparer-celery-worker
     build:
       context: ${HOME}/ska-src-dm-local-data-preparer
       dockerfile: Dockerfile.celery-worker
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+      src-cavern:
+        condition: service_healthy
     environment:
+      PREPARE_DATA_APPROACH: cavern_api_approach
+      ABS_PATH_USER_AREA_ROOT: /users/cavern/home
+      ABS_PATH_RSE_ROOT: /rse/deterministic
       CELERY_BROKER_URL: amqp://guest@rabbitmq//
       ABS_PATH_CELERY_RESULTS: /var/celery/results
-      CAVERN_API_URL: "https://haproxy:443/src/cavern"
-      CAVERN_API_TOKEN: "LOCAL_BYPASS_TOKEN"
+      CAVERN_API_URL: "https://haproxy/src/cavern"
+      CAVERN_API_TOKEN: "api-key prepareData:secret"
+      CAVERN_RESOURCE_ID: "ivo://skao.int/src/cavern"
+      CAVERN_API_SSL_VERIFY: "false"
+      SKA_TOKEN: "${SKA_TOKEN}"
     command: celery -A prepare_data.worker worker --loglevel=info -c 1
     networks:
-      src-network:
-        ipv4_address: 172.26.0.42
-    depends_on:
-      - rabbitmq
-      - src-cavern
-      - haproxy
+      - src-network
     volumes:
       - ./data/cavern_data:/users/cavern/home:rw
       - ./data/rse_data:/rse/deterministic:ro
       - ./logs/celery_results:/var/celery/results:rw
-    extra_hosts:
-      - "haproxy.cadc.dao.nrc.ca:172.26.0.2"
-      - "src-cavern:172.26.0.60"
-      - "rabbitmq:172.26.0.40"
 
 networks:
   src-network:
     driver: bridge
-    driver_opts:
-      com.docker.network.bridge.name: src-network
-    ipam:
-      config:
-        - subnet: 172.26.0.0/16
 
 volumes:
   srcnodedb_data:
