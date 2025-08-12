@@ -101,5 +101,5 @@ Once all services are running, you can use these `curl` commands from your termi
 
 * **POSIX Mapper Service (GET):** Tests the `src-posix-mapper` service by requesting user data.
     ```
-    curl -k https://haproxy.cadc.dao.nrc.ca/src/posix-mapper/users/username
+    curl -k -H "Authorization: Bearer $SKA_TOKEN" https://localhost/src/posix-mapper/uid?user=USERNAME
     ```
