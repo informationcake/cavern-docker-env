@@ -79,7 +79,7 @@ services:
       - cavern_cert_data:/ssl-config:ro
     command: >
       bash -c "
-        keytool -importcert -noprompt -keystore /usr/lib/jvm/java-11-openjdk-11.0.25.0.9-3.fc40.x86_64/lib/security/cacerts -storepass changeit -alias haproxy-local -file /ssl-config/haproxy-pub.pem;
+        export CATALINA_OPTS='-Djavax.net.ssl.trustStore=/ssl-config/truststore.p12 -Djavax.net.ssl.trustStorePassword=changeit -Djavax.net.ssl.trustStoreType=pkcs12 -Djavax.net.ssl.keyStore=/ssl-config/keystore.p12 -Djavax.net.ssl.keyStorePassword=changeit -Djavax.net.ssl.keyStoreType=pkcs12';
         exec cadc-tomcat-start
       "
 
@@ -143,7 +143,9 @@ services:
 
   src-cavern:
     platform: linux/amd64
-    image: images.opencadc.org/platform/cavern:0.8.3
+    #image: images.opencadc.org/platform/cavern:0.8.5
+    #image: at88mph/cavern:0.8.4-20250801T213007
+    image: at88mph/cavern:0.8.6-20250813T214645
     depends_on:
       cert-gen:
         condition: service_completed_successfully
@@ -161,12 +163,13 @@ services:
       - ./platform/src-cavern/config:/config:ro
       - ./platform/src-cavern/../local_data/src-cavern:/data:rw
       - cavern_cert_data:/ssl-config:ro
-      - ./data/rse_data:/cavern_rse_data:ro
+      - ./data/rse_data:/rse/deterministic:ro
     command: >
       bash -c "
-        keytool -importcert -noprompt -keystore /usr/lib/jvm/java-21-openjdk/lib/security/cacerts -storepass changeit -alias haproxy-local -file /ssl-config/haproxy-pub.pem;
+        export CATALINA_OPTS='-Djavax.net.ssl.trustStore=/ssl-config/truststore.p12 -Djavax.net.ssl.trustStorePassword=changeit -Djavax.net.ssl.trustStoreType=pkcs12 -Djavax.net.ssl.keyStore=/ssl-config/keystore.p12 -Djavax.net.ssl.keyStorePassword=changeit -Djavax.net.ssl.keyStoreType=pkcs12';
         exec cadc-tomcat-start
       "
+      
     healthcheck:
       test: ["CMD-SHELL", "curl -f http://localhost:8080/src/cavern/nodes/ || exit 1"]
       interval: 30s
@@ -239,7 +242,7 @@ services:
       CAVERN_RESOURCE_ID: "ivo://skao.int/src/cavern"
       CAVERN_API_SSL_VERIFY: "false"
       SKA_TOKEN: "${SKA_TOKEN}"
-    command: celery -A prepare_data.worker worker --loglevel=info -c 1
+    command: celery -A prepare_data.tasks.celery worker --loglevel=info -c 1
     networks:
       - src-network
     volumes:
