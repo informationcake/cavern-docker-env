@@ -72,22 +72,17 @@ Your Docker Compose setup orchestrates a comprehensive development environment f
     * **Purpose:** Executes the actual data preparation tasks (e.g., staging data to Cavern) in the background, as instructed by the `core` service.
     * **Interactions:** Connects to `rabbitmq` to fetch tasks. When running the `cavern_api_approach`, it uses the `CavernApiClient` to make API calls to `src-cavern` (via HAProxy). Crucially, when `CavernApiClient` tells `src-cavern` to pull data via `httpget`, `src-cavern` will fetch data from `rse-web`.
 
-10. **`rse-web`** (Container Name: `rse-web`):
-    * **Purpose:** A simple Nginx web server specifically for local development that serves the RSE (source) data via HTTP.
-    * **Interactions:** It exposes the local `data/rse_data` bind mount over HTTP. `src-cavern` (when instructed by the `celery-worker` via the `cavern_api_approach`) makes HTTP GET requests to `rse-web` to pull the actual data files.
 
 ### Overall Data Flow
 
-1.  External requests (e.g., `curl` commands from your terminal) come to `haproxy:443`.
-2.  HAProxy routes data preparation requests to `ska-src-local-data-preparer-core:8000`.
-3.  `core` receives the request, authenticates, and dispatches a data preparation task to `rabbitmq`.
-4.  `celery-worker` picks up the task from `rabbitmq`.
-5.  `celery-worker` (using the `cavern_api_approach`) initiates an API call to `src-cavern` (via HAProxy) to request a data transfer.
-6.  `src-cavern`, upon receiving the `pullToVoSpace` instruction, makes an `httpget` request to `rse-web` to fetch the data.
-7.  `rse-web` serves the file content from the locally mounted RSE data.
-8.  `src-cavern` pulls the data and stages it into its VOSpace (which uses its `srcnodedb` database and local filesystem mounts).
-9.  `celery-worker` monitors the task completion and reports status back to `core` via `rabbitmq`.
-10. `core` can then provide the task status to the original requester.
+-  External requests (e.g., `curl` commands from your terminal) come to `haproxy:443`.
+-  HAProxy routes data preparation requests to `ska-src-local-data-preparer-core:8000`.
+-  `core` receives the request, authenticates, and dispatches a data preparation task to `rabbitmq`.
+-  `celery-worker` picks up the task from `rabbitmq`.
+-  `celery-worker` (using the `cavern_api_approach`) initiates an API call to `src-cavern` (via HAProxy) to request a data transfer.
+-  `src-cavern` pulls the data and stages it into its VOSpace (which uses its `srcnodedb` database and local filesystem mounts).
+-  `celery-worker` monitors the task completion and reports status back to `core` via `rabbitmq`.
+-  `core` can then provide the task status to the original requester.
 
 ***
 
@@ -124,7 +119,7 @@ To test the `prepare-data` service, you'll typically submit tasks to the `core` 
 
 * **Prerequisites for `cavern_api_approach`:**
     * Ensure `PREPARE_DATA_APPROACH: cavern_api_approach` is set in your `docker-compose.yml` for `core` and `celery-worker`.
-    * Place a test file (e.g., `prepare_data_test.txt`) at the correct path within your `./data/rse_data/testing/84/1c/` directory, so `rse-web` can serve it.
+    * Place a test file (e.g., `prepare_data_test.txt`) at the correct path within your `./data/rse_data/testing/84/1c/` directory
     * You will need a valid `SKA_IAM_TOKEN`.
 
 * **Submit a Data Preparation Task:**
