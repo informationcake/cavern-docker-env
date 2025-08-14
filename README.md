@@ -124,7 +124,6 @@ To test the `prepare-data` service, you'll typically submit tasks to the `core` 
 
 * **Prerequisites for `cavern_api_approach`:**
     * Ensure `PREPARE_DATA_APPROACH: cavern_api_approach` is set in your `docker-compose.yml` for `core` and `celery-worker`.
-    * Ensure `ABS_URL_RSE_ROOT` is correctly configured in `docker-compose.yml` to point to your `rse-web` service (e.g., `http://rse-web:80/rse/deterministic`).
     * Place a test file (e.g., `prepare_data_test.txt`) at the correct path within your `./data/rse_data/testing/84/1c/` directory, so `rse-web` can serve it.
     * You will need a valid `SKA_IAM_TOKEN`.
 
